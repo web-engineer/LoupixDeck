@@ -75,6 +75,7 @@ public partial class LoupedeckLiveSController(
 
     private volatile bool _isDeviceOff;
     public bool IsDeviceOff => _isDeviceOff;
+    public event EventHandler DeviceStateChanged;
 
     /// <inheritdoc />
     public bool IsDeviceConnected => deviceService.Device?.IsConnected == true;
@@ -193,6 +194,7 @@ public partial class LoupedeckLiveSController(
         if (_isDeviceOff) return;
         _isDeviceOff = true;
         _blankedForSuspend = forSuspend;
+        DeviceStateChanged?.Invoke(this, EventArgs.Empty);
         // The device goes dark (or the machine suspends) — a held button's release will never
         // arrive, so nothing may keep waiting on it (#185).
         ReleaseAllPresses();
@@ -266,7 +268,11 @@ public partial class LoupedeckLiveSController(
         // Anything still tracked from before the device went off is stale by definition (#185).
         ReleaseAllPresses();
 
-        if (await PushFullState()) return;
+        if (await PushFullState())
+        {
+            DeviceStateChanged?.Invoke(this, EventArgs.Empty);
+            return;
+        }
 
         // Back to exactly the state we came from. A device blanked by a suspend keeps that mark,
         // so the next connect still takes it online by itself; a device the user turned off stays
@@ -397,8 +403,10 @@ public partial class LoupedeckLiveSController(
                 if (takeOnline)
                 {
                     _blankedForSuspend = false;
+                    var wasOff = _isDeviceOff;
                     _isDeviceOff = false;
                     ReleaseAllPresses();
+                    if (wasOff) DeviceStateChanged?.Invoke(this, EventArgs.Empty);
                 }
             }
             finally

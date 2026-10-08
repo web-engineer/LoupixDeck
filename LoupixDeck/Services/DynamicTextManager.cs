@@ -1,4 +1,5 @@
 using Avalonia.Threading;
+using LoupixDeck.Controllers;
 using LoupixDeck.Models;
 using LoupixDeck.Models.Layers;
 using LoupixDeck.PluginSdk;
@@ -49,6 +50,7 @@ public sealed class DynamicTextManager : IDynamicTextManager, IDisposable
     private readonly ICommandRegistry _commandRegistry;
     private readonly IServiceProvider _deviceProvider;
     private readonly IDeviceRouter _router;
+    private readonly IDeviceController _controller;
 
     private readonly Lock _gate = new();
     private List<Entry> _active = new();
@@ -63,22 +65,35 @@ public sealed class DynamicTextManager : IDynamicTextManager, IDisposable
         ICommandRegistry commandRegistry,
         IServiceProvider deviceProvider,
         IDeviceRouter router,
+        IDeviceController controller,
         LoupedeckConfig config)
     {
         _pageManager = pageManager;
         _commandRegistry = commandRegistry;
         _deviceProvider = deviceProvider;
         _router = router;
+        _controller = controller;
         _config = config;
     }
 
     public void Start()
     {
         _pageManager.TouchLayoutChanged += OnTouchLayoutChanged;
+        _controller.DeviceStateChanged += OnDeviceStateChanged;
         Rescan();
     }
 
     private void OnTouchLayoutChanged() => Rescan();
+
+    // Polling pauses while the device is off (nothing is visible, so plugins should not fetch
+    // data for it) and resumes with a fresh rescan, which rebuilds the entries.
+    private void OnDeviceStateChanged(object sender, EventArgs e)
+    {
+        if (_controller.IsDeviceOff)
+            StopLoop();
+        else
+            Rescan();
+    }
 
     public void Rescan()
     {
@@ -129,7 +144,7 @@ public sealed class DynamicTextManager : IDynamicTextManager, IDisposable
         // (command changed/cleared, or its plugin was uninstalled) before (re)starting the loop.
         SweepOrphanLayers(page);
 
-        if (entries.Count == 0)
+        if (entries.Count == 0 || _controller.IsDeviceOff)
             return;
 
         var minInterval = entries.Min(e => e.Interval);
@@ -556,6 +571,7 @@ public sealed class DynamicTextManager : IDynamicTextManager, IDisposable
     public void Dispose()
     {
         _pageManager.TouchLayoutChanged -= OnTouchLayoutChanged;
+        _controller.DeviceStateChanged -= OnDeviceStateChanged;
         StopLoop();
     }
 

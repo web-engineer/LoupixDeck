@@ -27,6 +27,12 @@ public interface IDeviceController
     bool IsDeviceOff { get; }
 
     /// <summary>
+    /// Raised after <see cref="IsDeviceOff"/> changes: the device was turned off, restored,
+    /// blanked for a system suspend, or brought back online by a resync.
+    /// </summary>
+    event EventHandler DeviceStateChanged;
+
+    /// <summary>
     /// True while the device's serial link is open and usable. A device can be present on the
     /// USB bus yet not connected — e.g. another program held its port at startup — in which case
     /// the hot-plug reconciler uses this to know a reconnect is needed.
